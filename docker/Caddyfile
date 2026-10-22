@@ -1,0 +1,8 @@
+{$QORVEXA_DOMAIN} {
+  encode zstd gzip
+
+  @api path /api/*
+  reverse_proxy @api api:4000
+
+  respond /health "Qorvexa edge is healthy" 200
+}

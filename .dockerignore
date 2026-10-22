@@ -1,0 +1,11 @@
+node_modules
+.next
+dist
+.env
+.env.*
+!/.env.production.example
+.git
+coverage
+apps/ai-service/.venv
+apps/ai-service/__pycache__
+apps/ai-service/app/__pycache__

@@ -1,0 +1,98 @@
+﻿# ============================================================
+# Dependencies
+# ============================================================
+node_modules/
+**/node_modules/
+
+# ============================================================
+# Environment variables and secrets
+# Keep ALL .env files out of Git, including example files.
+# A sanitized template can be added later after manual review.
+# ============================================================
+.env
+.env.*
+.env_*
+**/.env
+**/.env.*
+**/.env_*
+
+# Credentials, certificates and private keys
+**/secrets/
+**/secret/
+**/credentials/
+**/.aws/
+**/.ssh/
+**/.netrc
+**/.npmrc
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.jks
+**/*.keystore
+**/*service-account*.json
+**/*credentials*.json
+**/*secret*.json
+
+# Terraform state can contain sensitive infrastructure values
+**/.terraform/
+*.tfstate
+*.tfstate.*
+
+# ============================================================
+# Build output and caches
+# ============================================================
+.next/
+**/.next/
+dist/
+**/dist/
+build/
+**/build/
+out/
+coverage/
+.turbo/
+*.tsbuildinfo
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# ============================================================
+# Logs, test output and temporary backups
+# ============================================================
+*.log
+api-test-results.txt
+test-results/
+playwright-report/
+*.model-backup
+*.bak
+*.backup
+*.tmp
+*.swp
+*~
+
+# ============================================================
+# Local IDE settings
+# ============================================================
+.vscode/
+.idea/
+
+# ============================================================
+# Archives and exported project snapshots
+# ============================================================
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+
+# ============================================================
+# Legacy root-level frontend files
+# Current Next.js frontend lives in apps/web
+# ============================================================
+/app.js
+/index.html
+/styles.css
+/favicon.svg

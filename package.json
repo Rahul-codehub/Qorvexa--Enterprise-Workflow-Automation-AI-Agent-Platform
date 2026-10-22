@@ -1,0 +1,24 @@
+
+{
+  "name": "qorvexa-enterprise-workflow-platform",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=@qorvexa/web",
+    "dev:api": "npm run dev --workspace=@qorvexa/api",
+    "dev:worker": "npm run dev --workspace=@qorvexa/worker",
+    "build": "npm run build --workspace=@qorvexa/shared && npm run build --workspace=@qorvexa/api && npm run build --workspace=@qorvexa/worker && npm run build --workspace=@qorvexa/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "overrides": {
+    "postcss": "^8.5.23"
+  }
+}
