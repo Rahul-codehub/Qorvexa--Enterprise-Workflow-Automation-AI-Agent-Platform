@@ -39,6 +39,20 @@ type Execution = {
   steps: Step[];
 };
 
+type ExecutionHistoryItem = {
+  id: string;
+  workflowId: string;
+  workflowVersion: number;
+  status: string;
+  error: string | null;
+  queuedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  durationMs: number | null;
+  stepCount: number;
+};
+
 type ApiError = {
   error?: {
     message?: string;
@@ -106,9 +120,19 @@ export default function Home() {
   const [latestExecution, setLatestExecution] =
     useState<Execution | null>(null);
 
+  const [historyWorkflow, setHistoryWorkflow] =
+    useState<Workflow | null>(null);
+
+  const [executionHistory, setExecutionHistory] =
+    useState<ExecutionHistoryItem[]>([]);
+
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+
 
   const apiFetch = useCallback(
     async <T,>(
@@ -129,6 +153,21 @@ export default function Home() {
       });
 
       const body = await response.json().catch(() => ({}));
+
+      // Clear a saved session when the authenticated API rejects it.
+      if (response.status === 401 && accessToken) {
+        localStorage.removeItem('qorvexa.accessToken');
+        localStorage.removeItem('qorvexa.user');
+
+        setToken('');
+        setUser(null);
+        setMode('login');
+
+        const message = 'Your session has expired. Please sign in again.';
+        setError(message);
+
+        throw new Error(message);
+      }
 
       if (!response.ok) {
         const apiError = body as ApiError;
@@ -442,11 +481,68 @@ export default function Home() {
         method: 'POST',
       });
 
+
+
       await loadWorkflows(token);
       setNotice('Workflow published and ready to execute.');
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Could not publish workflow.',
+      );
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function loadExecutionHistory(workflow: Workflow) {
+    setHistoryWorkflow(workflow);
+    setExecutionHistory([]);
+    setHistoryLoading(true);
+    setError('');
+    setNotice('');
+
+    try {
+      const result = await apiFetch<{
+        data: ExecutionHistoryItem[];
+        pagination: {
+          limit: number;
+          hasMore: boolean;
+        };
+      }>(`/workflows/${workflow.id}/executions?limit=20`);
+
+      setExecutionHistory(result.data);
+      setNotice(`Loaded execution history for ${workflow.name}.`);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not load execution history.',
+      );
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function inspectExecution(
+    workflowId: string,
+    executionId: string,
+  ) {
+    setBusy(`inspect:${executionId}`);
+    setError('');
+    setNotice('');
+
+    try {
+      const result = await apiFetch<{ data: Execution }>(
+        `/workflows/${workflowId}/executions/${executionId}`,
+      );
+
+      setLatestExecution(result.data);
+      setNotice('Loaded persisted execution details.');
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not load execution details.',
       );
     } finally {
       setBusy('');
@@ -815,6 +911,17 @@ export default function Home() {
               </div>
 
               <div className="card-actions">
+                <button
+                  className="secondary"
+                  onClick={() => loadExecutionHistory(workflow)}
+                  disabled={busy !== '' || historyLoading}
+                  style={{ marginRight: 8, marginBottom: 8 }}
+                >
+                  {historyLoading && historyWorkflow?.id === workflow.id
+                    ? 'Loading…'
+                    : 'View history'}
+                </button>
+
                 {workflow.status === 'draft' && (
                   <button
                     className="primary"
@@ -824,6 +931,8 @@ export default function Home() {
                     {busy === `publish:${workflow.id}` ? 'Publishing…' : 'Publish'}
                   </button>
                 )}
+
+                {/* Keep your existing published and archived conditions here. */}
 
                 {workflow.status === 'published' && (
                   <button
@@ -841,6 +950,82 @@ export default function Home() {
               </div>
             </article>
           ))}
+        </section>
+      )}
+
+      {historyWorkflow && (
+        <section className="execution-panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">RUN HISTORY</p>
+              <h2>{historyWorkflow.name}</h2>
+            </div>
+
+            <button
+              className="secondary"
+              onClick={() => {
+                setHistoryWorkflow(null);
+                setExecutionHistory([]);
+              }}
+            >
+              Close history
+            </button>
+          </div>
+
+          {historyLoading ? (
+            <p className="muted">Loading execution history…</p>
+          ) : executionHistory.length === 0 ? (
+            <p className="muted">
+              No execution records found for this workflow yet.
+            </p>
+          ) : (
+            <div className="history-list">
+              {executionHistory.map((item) => (
+                <article className="history-item" key={item.id}>
+                  <div className="history-meta">
+                    <strong>Run {item.id.slice(-8)}</strong>
+
+                    <span className="muted">
+                      {new Date(item.createdAt).toLocaleString()}
+                    </span>
+
+                    <span className="muted">
+                      Version {item.workflowVersion} · {item.stepCount} steps
+                    </span>
+
+                    <span className="muted">
+                      Duration:{' '}
+                      {item.durationMs === null
+                        ? 'Not finished'
+                        : `${(item.durationMs / 1000).toFixed(2)} s`}
+                    </span>
+
+                    {item.error && (
+                      <span className="history-error">
+                        Error: {item.error}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="history-controls">
+                    <span className={`status ${item.status}`}>
+                      {item.status}
+                    </span>
+
+                    <button
+                      className="secondary"
+                      onClick={() =>
+                        inspectExecution(item.workflowId, item.id)
+                      }
+                      disabled={busy !== ''}
+                    >
+                      Inspect
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
@@ -991,6 +1176,59 @@ const styles = `
   .execution-panel .section-heading { margin: 0 0 8px; }
   .execution-id { overflow-wrap: anywhere; font-size: 12px; }
   .step-list { margin: 22px 0; border: 1px solid #eeedf5; border-radius: 12px; overflow: hidden; }
+  .history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #eeedf5;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.history-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.history-meta strong {
+  font-size: 13px;
+}
+
+.history-meta .muted {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.history-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.history-error {
+  color: #b42318;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 620px) {
+  .history-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
   .step-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 15px; border-bottom: 1px solid #eeedf5; }
   .step-row:last-child { border-bottom: 0; }
   .step-row > div { display: flex; align-items: center; gap: 12px; }

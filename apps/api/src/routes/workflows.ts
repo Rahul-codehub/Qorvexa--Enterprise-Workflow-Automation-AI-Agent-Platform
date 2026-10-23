@@ -493,7 +493,7 @@ workflowsRouter.post(
         organizationId: workflow.organizationId,
         workflowId: workflow._id,
         workflowVersion: workflow.version,
-          workflowSnapshot: workflow.graph,
+        workflowSnapshot: workflow.graph,
         triggeredBy: principal.sub,
         status: 'queued',
         input: parsedInput.data.input,
@@ -549,6 +549,109 @@ workflowsRouter.post(
   }
 );
 
+// -----------------------------------------------------------------------------
+// GET /:id/executions
+// List recent executions for a workflow in the authenticated organization.
+// -----------------------------------------------------------------------------
+
+workflowsRouter.get(
+  '/:id/executions',
+  async (request, response, next) => {
+    try {
+      const parsedWorkflowId = workflowIdSchema.safeParse(
+        request.params.id,
+      );
+
+      if (!parsedWorkflowId.success) {
+        return response.status(400).json({
+          error: {
+            code: 'INVALID_WORKFLOW_ID',
+            message: 'Workflow ID is invalid.',
+          },
+        });
+      }
+
+      const parsedLimit = z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(50)
+        .safeParse(request.query.limit ?? '20');
+
+      if (!parsedLimit.success) {
+        return response.status(400).json({
+          error: {
+            code: 'INVALID_LIMIT',
+            message: 'Limit must be an integer between 1 and 50.',
+          },
+        });
+      }
+
+      const principal = response.locals.principal;
+
+      const workflow = await Workflow.findOne({
+        _id: parsedWorkflowId.data,
+        organizationId: principal.organizationId,
+      })
+        .select({ _id: 1 })
+        .lean();
+
+      if (!workflow) {
+        return response.status(404).json({
+          error: {
+            code: 'WORKFLOW_NOT_FOUND',
+            message: 'Workflow was not found.',
+          },
+        });
+      }
+
+      const executions = await Execution.find({
+        workflowId: workflow._id,
+        organizationId: principal.organizationId,
+      })
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(parsedLimit.data + 1)
+        .select(
+          'workflowId workflowVersion status error queuedAt startedAt completedAt createdAt steps.nodeId',
+        )
+        .lean();
+
+      const hasMore = executions.length > parsedLimit.data;
+      const items = executions
+        .slice(0, parsedLimit.data)
+        .map((execution) => ({
+          id: String(execution._id),
+          workflowId: String(execution.workflowId),
+          workflowVersion: execution.workflowVersion,
+          status: execution.status,
+          error: execution.error,
+          queuedAt: execution.queuedAt,
+          startedAt: execution.startedAt,
+          completedAt: execution.completedAt,
+          createdAt: execution.createdAt,
+          durationMs:
+            execution.startedAt && execution.completedAt
+              ? Math.max(
+                0,
+                execution.completedAt.getTime() -
+                execution.startedAt.getTime(),
+              )
+              : null,
+          stepCount: execution.steps?.length ?? 0,
+        }));
+
+      return response.json({
+        data: items,
+        pagination: {
+          limit: parsedLimit.data,
+          hasMore,
+        },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
 
 /**
  * GET /:id/executions/:executionId

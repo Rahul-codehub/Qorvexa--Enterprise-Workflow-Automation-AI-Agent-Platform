@@ -326,6 +326,68 @@ describe('Workflow API integration tests', () => {
         assert.deepEqual(statusBody.data.input, { testRun: true });
         assert.deepEqual(statusBody.data.steps, []);
 
+        // Execution history returns the saved execution for this workflow.
+        const historyResponse = await fetch(
+            `${baseUrl}/api/v1/workflows/${createdWorkflowId}/executions?limit=10`,
+            {
+                headers: {
+                    Authorization: `Bearer ${ownerToken}`,
+                },
+            },
+        );
+
+        assert.equal(historyResponse.status, 200);
+
+        const historyBody = await historyResponse.json() as {
+            data: Array<{
+                id: string;
+                workflowId: string;
+                workflowVersion: number;
+                status: string;
+                stepCount: number;
+                durationMs: number | null;
+            }>;
+            pagination: {
+                limit: number;
+                hasMore: boolean;
+            };
+        };
+
+        const historyItem = historyBody.data.find(
+            (item) => item.id === executionId,
+        );
+
+        assert.ok(historyItem, 'Execution should appear in workflow history');
+        assert.equal(historyItem.workflowId, createdWorkflowId);
+        assert.equal(historyItem.workflowVersion, originalVersion);
+        assert.equal(historyItem.status, 'queued');
+        assert.equal(historyItem.stepCount, 0);
+        assert.equal(historyBody.pagination.limit, 10);
+
+        // Another organization must not access this workflow's history.
+        const otherHistoryResponse = await fetch(
+            `${baseUrl}/api/v1/workflows/${createdWorkflowId}/executions`,
+            {
+                headers: {
+                    Authorization: `Bearer ${otherOrganizationOwnerToken}`,
+                },
+            },
+        );
+
+        assert.equal(otherHistoryResponse.status, 404);
+
+        // Reject invalid pagination limits.
+        const invalidLimitResponse = await fetch(
+            `${baseUrl}/api/v1/workflows/${createdWorkflowId}/executions?limit=0`,
+            {
+                headers: {
+                    Authorization: `Bearer ${ownerToken}`,
+                },
+            },
+        );
+
+        assert.equal(invalidLimitResponse.status, 400);
+
         const crossOrganizationResponse = await fetch(
             `${baseUrl}/api/v1/workflows/${createdWorkflowId}/executions/${executionId}`,
             {
